@@ -1,124 +1,63 @@
-# AI Image Classification Application - Technical Interview Q&A
+# Technical Interview Questions & Answers
 
-This document provides clear, technically precise, and concise answers to common viva and technical interview questions regarding this project.
-
----
-
-### 1. Why did you select React?
-React provides a component-based architecture and declarative state management. In an AI application with asynchronous model loading, file uploading, preview generation, and dynamic progress bars, React's reactive state automatically keeps the UI synchronized with underlying model states without manual DOM manipulation.
+### 1. Why React?
+React provides component-based structure and reactive state management. State updates naturally trigger UI changes as the model loads, images are selected, and predictions are calculated.
 
 ### 2. Why TensorFlow.js?
-TensorFlow.js enables running pre-trained deep learning models directly in the JavaScript runtime environment (browser or Node.js). It leverages the user's local GPU via WebGL acceleration, enabling high-performance neural network inference without requiring any backend server or Python environment.
+TensorFlow.js enables running deep learning models directly in JavaScript. It utilizes the browser's GPU via WebGL to perform fast neural network inference locally on client devices.
 
 ### 3. Why MobileNet?
-MobileNet (v2) is a lightweight Convolutional Neural Network (CNN) architecture designed specifically for mobile and edge devices. It utilizes depthwise separable convolutions, drastically reducing model parameter size (~16MB) while retaining high classification accuracy across 1,000 ImageNet categories.
+MobileNet is a compact Convolutional Neural Network (CNN) optimized for mobile and web environments. It uses depthwise separable convolutions to reduce parameter size (~16 MB) while maintaining good accuracy across 1,000 ImageNet categories.
 
-### 4. Why did you choose browser-based inference?
-Browser-based client-side inference offers three critical advantages:
-1. **Zero Server / API Costs**: No cloud GPU or server hosting expenses.
-2. **User Privacy**: Images never leave the client's device.
-3. **Low Latency & Offline Capability**: Once the model weights are cached, predictions run locally without network roundtrips.
+### 4. Why browser inference?
+It eliminates server costs, protects user privacy (images stay local), and allows offline predictions once the model is loaded.
 
-### 5. Why didn't you use Python?
-For this specific practical requirement, client-side browser execution was requested. Python would require hosting a backend service (e.g. FastAPI/Flask with PyTorch/TensorFlow), increasing deployment complexity, latency, infrastructure costs, and server memory demands for image uploads.
+### 5. Why no backend?
+For this application, browser inference is fast and self-contained. Adding a backend server like Python/FastAPI would introduce extra latency, hosting costs, and infrastructure complexity without added benefit.
 
-### 6. Explain your architecture.
-The architecture consists of:
-- **React Frontend**: Manages UI state, file upload drop zone, previews, and historical cards.
-- **Classifier Service (`src/services/classifier.js`)**: A singleton module that loads and caches the MobileNet model once and exposes `classifyImage(imgElement)`.
-- **Validation & Storage Utilities**: `fileValidation.js` enforces file format/size rules, while `storage.js` manages persistent history in `localStorage`.
-- **TensorFlow.js Runtime**: Executes tensor calculations on the browser GPU via WebGL.
+### 6. How does image classification work?
+The input image pixel array is fed into the Convolutional Neural Network. Feature layers detect edges, shapes, and complex object parts, and the final Softmax activation layer outputs probability scores across candidate classes.
 
-### 7. How does image classification work?
-Image classification inputs a digital image (RGB pixel matrix), passes it through layers of a Convolutional Neural Network (CNN) to extract feature maps (edges, textures, shapes, complex objects), and outputs a probability vector across candidate classes using a Softmax activation function.
+### 7. How is confidence calculated and displayed?
+The confidence score comes from the model's Softmax output probabilities (0 to 1). We convert it to a percentage and format it to 2 decimal places (e.g. `94.72%`).
 
-### 8. How does MobileNet work at a high level?
-MobileNet replaces standard 3D convolutions with **Depthwise Separable Convolutions**, split into two steps:
-1. *Depthwise Convolution*: Applies a single spatial filter per input channel.
-2. *Pointwise Convolution*: Applies a 1x1 convolution to combine channels.
-This reduces computation and parameter size by 8 to 9 times compared to standard convolutions with minimal loss in accuracy.
+### 8. Why top 3 predictions?
+Displaying the top 3 predictions gives context when the model is uncertain or when an image contains features relevant to multiple closely related categories (e.g., different dog breeds).
 
-### 9. How are top 3 predictions generated?
-MobileNet's final layer outputs a probability array of 1,000 numbers summing to 1.0 (100%). The `model.classify(imgElement, 3)` function sorts these probabilities descendingly and returns the top 3 items containing the `className` label and `probability` value.
+### 9. How is prediction history stored?
+History items are saved in `localStorage` under `image_classifier_history`. We generate small JPEG thumbnails using HTML Canvas so stored data stays well within browser storage limits.
 
-### 10. What is a confidence score?
-A confidence score is the output probability (ranging from 0.0 to 1.0 or 0% to 100%) assigned by the neural network's final Softmax activation layer to a specific class. It reflects the model's mathematical certainty based on learned features.
+### 10. What happens if the model fails?
+If model loading fails, we catch the error, show a clear message, and provide a "Retry" button so the user can re-attempt loading without refreshing the page.
 
-### 11. Can a high confidence prediction still be wrong?
-Yes. Deep neural networks can be overly confident on out-of-distribution images, adversarial noise, or unlearned categories. A model might assign 95% confidence to an object simply because it shares textures or shapes with an ImageNet class it was trained on.
+### 11. How are invalid files handled?
+In `fileValidation.js`, we verify MIME type and check that file size is ≤ 5 MB. If validation fails, an error message is displayed and classification is blocked.
 
-### 12. What happens when the model gives an incorrect prediction?
-When an incorrect prediction occurs:
-- If confidence is low (< 50%), our UI flags a warning alert: *"Low confidence prediction. The model may not recognize this image accurately."*
-- The top 3 predictions showcase alternative candidate classes.
-- In production, such images would be logged for dataset re-training or human review.
+### 12. How would you improve accuracy?
+1. Fine-tune a custom model on domain-specific dataset images.
+2. Use larger architectures like MobileNet v3 or EfficientNet.
+3. Pre-process and crop input images around primary objects before classification.
 
-### 13. How did you handle invalid files?
-In `src/utils/fileValidation.js`, we validate:
-1. **MIME type**: Strictly allow `image/jpeg`, `image/png`, `image/webp`.
-2. **File Size**: Cap size at 5 MB (`5 * 1024 * 1024` bytes).
-If validation fails, processing stops immediately and an actionable error alert is rendered without crashing the app.
+### 13. How would you handle 10,000 users?
+Because inference happens on the client side, scaling is straightforward. The app assets are static files that can be cached on a CDN (like Vercel or Cloudflare CDN), incurring minimal server overhead regardless of user volume.
 
-### 14. How did you handle model loading errors?
-In `src/services/classifier.js`, model loading is wrapped in a try-catch block. If loading fails (e.g. offline network during weight fetch), `modelStatus` shifts to `'error'`, an inline error banner appears with a **"Retry Load"** button allowing the user to re-attempt fetching weights.
+### 14. What are the limitations of MobileNet?
+- Fixed to 1,000 ImageNet classes.
+- Resizes input to 224x224 pixels, which can blur fine details.
+- Classifies the entire image rather than locating individual objects with bounding boxes.
 
-### 15. How did you handle prediction errors?
-If tensor processing fails (e.g., broken image element or WebGL context loss), the error is caught, the classify button re-enables, and the user receives a message: *"Unable to classify this image. Please try again."*
+### 15. What is the difference between an AI API and a locally loaded model?
+- **AI API**: Sends data to a third-party cloud server that processes the request and returns predictions via HTTP. Requires internet and incurs API costs.
+- **Locally loaded model**: Downloads model weights once and executes inference on the client machine locally.
 
-### 16. Why did you use localStorage?
-`localStorage` provides simple, client-side persistent storage that requires no database setup, network connection, or user authentication. It allows classification history to survive page refreshes while preserving user privacy.
+### 16. What is an embedding?
+An embedding is a numerical vector (array of numbers) representing an image or text in a high-dimensional vector space, capturing semantic meaning and feature similarity.
 
-### 17. Why didn't you use MongoDB?
-MongoDB requires a backend server, database credentials, network requests, and user authentication infrastructure. Since this application operates entirely client-side without user accounts or server infrastructure, `localStorage` was the appropriate choice.
+### 17. What is RAG?
+Retrieval-Augmented Generation (RAG) is a technique where external documents are retrieved from a database and injected into an LLM's context to generate factually accurate answers.
 
-### 18. How did you protect API credentials?
-No API keys or credentials were used or exposed. MobileNet is an open-source, pre-trained model downloaded directly from public TensorFlow Hub CDNs.
+### 18. What is prompt engineering?
+Prompt engineering is the process of structuring natural language instructions sent to Large Language Models (LLMs) to produce desired outputs.
 
-### 19. Why don't you need an API key?
-Because model weights are open-source and downloaded directly into the browser to run inference locally via TensorFlow.js. No commercial cloud AI API (such as OpenAI or Google Cloud Vision) is being queried.
-
-### 20. What are MobileNet's limitations?
-1. Limited to 1,000 ImageNet categories.
-2. Low resolution input scaling (224x224 pixels), which can drop fine detail in complex scenes.
-3. Cannot perform multi-object detection (bounding boxes) or segmentation out of the box.
-
-### 21. How would you improve this project?
-1. Support object detection models (e.g. YOLOv8 / COCO-SSD) to draw bounding boxes around multiple objects.
-2. Support custom fine-tuned model loading via uploadable TF.js model files (`model.json`).
-3. Add batch image processing export (CSV/JSON download).
-
-### 22. How would you scale it to 10,000 users?
-Because inference is 100% client-side, the app scales effortlessly to 10,000+ users! Static assets (HTML, JS, CSS, model weights) can be served through a global CDN (Vercel / Cloudflare). Server load remains near zero regardless of user volume.
-
-### 23. When would you move inference to a backend?
-Inference should move to a backend if:
-1. The model is too large for browsers (>100MB, e.g., LLaMA, ResNet-152).
-2. Model weights are proprietary intellectual property that must not be downloaded by clients.
-3. High-resolution raw images or batch server processing is required.
-
-### 24. What is client-side inference?
-Client-side inference means running the machine learning model directly on the end user's device (laptop, phone) using their CPU/GPU via JavaScript/WASM/WebGL.
-
-### 25. What is server-side inference?
-Server-side inference means sending input data (images, text) via HTTP/gRPC API to a cloud server or microservice where powerful GPUs (e.g. NVIDIA A100) run the model and return results.
-
-### 26. What is an AI API?
-An AI API is a cloud service (e.g. OpenAI GPT-4 Vision, Google Cloud Vision) that exposes trained machine learning models via REST endpoints, charging per request or token.
-
-### 27. What is a locally hosted model?
-A locally hosted model is a model running on local infrastructure or on client hardware without relying on third-party cloud SaaS providers.
-
-### 28. What is an embedding?
-An embedding is a dense numerical vector representation (e.g. 512 numbers) of an image or text chunk in a continuous vector space, capturing semantic features and relationships.
-
-### 29. What is RAG?
-Retrieval-Augmented Generation (RAG) is an AI architecture that enhances LLM responses by retrieving relevant factual documents from an external vector database before generating an answer.
-
-### 30. What is prompt engineering?
-Prompt engineering is the practice of crafting, structuring, and refining natural language prompts to guide Large Language Models (LLMs) to produce accurate, context-aware outputs.
-
-### 31. What is AI hallucination?
-AI hallucination occurs when a generative AI model (such as an LLM) generates confident but factually incorrect, fabricated, or nonsensical information not grounded in its training data or input context.
-
-### 32. Is hallucination relevant to image classification?
-No. Discriminative models like MobileNet do not generate text or hallucinate content. They perform deterministic multi-class classification by outputting mathematical probabilities across a fixed set of predefined classes.
+### 19. What is hallucination?
+Hallucination occurs when a generative AI model generates plausible-sounding but factually incorrect or fabricated information.

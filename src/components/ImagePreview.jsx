@@ -1,11 +1,6 @@
 import React, { useRef } from 'react';
-import { Image as ImageIcon, Trash2, Sparkles, Loader2, Images } from 'lucide-react';
 import { formatFileSize } from '../utils/fileValidation';
 
-/**
- * ImagePreview Component
- * Displays image preview, metadata, remove option, batch tab switcher, and Classify action button.
- */
 export default function ImagePreview({
   images,
   selectedIndex,
@@ -15,104 +10,75 @@ export default function ImagePreview({
   isClassifying,
   isModelReady
 }) {
-  const currentImgRef = useRef(null);
+  const imgRef = useRef(null);
 
   if (!images || images.length === 0) return null;
 
-  const activeItem = images[selectedIndex] || images[0];
-
-  const handleClassifyClick = () => {
-    if (currentImgRef.current && !isClassifying && isModelReady) {
-      onClassify(currentImgRef.current, activeItem);
-    }
-  };
+  const current = images[selectedIndex] || images[0];
 
   return (
-    <div className="preview-card">
-      <div className="card-header flex-between">
-        <div className="header-left">
-          <h2 className="card-title">
-            <ImageIcon className="card-title-icon" /> Image Preview
-          </h2>
-          {images.length > 1 && (
-            <span className="batch-badge">
-              <Images className="batch-icon" /> {selectedIndex + 1} of {images.length} images
-            </span>
-          )}
-        </div>
+    <div className="card preview-card">
+      <div className="card-header">
+        <h2 className="card-title">Image Preview</h2>
+        {images.length > 1 && (
+          <span className="badge">{selectedIndex + 1} of {images.length}</span>
+        )}
       </div>
 
-      {/* Multiple Image Selector Tabs (if multiple images selected) */}
       {images.length > 1 && (
-        <div className="image-tabs-container">
+        <div className="thumb-bar">
           {images.map((item, idx) => (
             <button
               key={item.id}
-              className={`tab-thumb-btn ${idx === selectedIndex ? 'active' : ''}`}
+              className={`thumb-item ${idx === selectedIndex ? 'active' : ''}`}
               onClick={() => onSelectIndex(idx)}
               type="button"
-              title={item.file.name}
             >
               <img src={item.previewUrl} alt={`Thumbnail ${idx + 1}`} />
-              <span className="tab-number">{idx + 1}</span>
             </button>
           ))}
         </div>
       )}
 
-      {/* Main Image Display Box */}
-      <div className="preview-body">
-        <div className="preview-image-wrapper">
-          <img
-            ref={currentImgRef}
-            src={activeItem.previewUrl}
-            alt={activeItem.file.name}
-            className="preview-img"
-            crossOrigin="anonymous"
-          />
-        </div>
-
-        {/* Metadata info row */}
-        <div className="preview-meta">
-          <div className="meta-details">
-            <span className="meta-filename" title={activeItem.file.name}>
-              {activeItem.file.name}
-            </span>
-            <span className="meta-filesize">
-              {formatFileSize(activeItem.file.size)}
-            </span>
-          </div>
-
-          <button
-            className="remove-btn"
-            onClick={() => onRemoveImage(activeItem.id)}
-            disabled={isClassifying}
-            type="button"
-            aria-label="Remove Image"
-          >
-            <Trash2 className="btn-icon" /> Remove Image
-          </button>
-        </div>
+      <div className="preview-image-box">
+        <img
+          ref={imgRef}
+          src={current.previewUrl}
+          alt={current.file.name}
+          className="preview-img"
+          crossOrigin="anonymous"
+        />
       </div>
 
-      {/* Action footer */}
+      <div className="file-meta-row">
+        <div className="file-details">
+          <span className="file-name" title={current.file.name}>{current.file.name}</span>
+          <span className="file-size">{formatFileSize(current.file.size)}</span>
+        </div>
+
+        <button
+          className="btn-danger-outline"
+          onClick={() => onRemoveImage(current.id)}
+          disabled={isClassifying}
+          type="button"
+        >
+          Remove Image
+        </button>
+      </div>
+
       <div className="preview-actions">
         <button
-          className="classify-btn"
-          onClick={handleClassifyClick}
+          className="btn-primary btn-block"
+          onClick={() => imgRef.current && onClassify(imgRef.current, current)}
           disabled={isClassifying || !isModelReady}
           type="button"
         >
           {isClassifying ? (
-            <>
-              <Loader2 className="btn-icon spinner" />
-              <span>Analyzing Neural Features...</span>
-            </>
+            <span className="btn-loading flex-center">
+              <span className="btn-spinner" /> Classifying Image...
+            </span>
           ) : (
-            <>
-              <Sparkles className="btn-icon" />
-              <span>Classify Image</span>
-            </>
+            'Classify Image'
           )}
         </button>
       </div>

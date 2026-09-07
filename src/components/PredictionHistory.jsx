@@ -1,98 +1,68 @@
 import React from 'react';
-import { History, Trash2, Calendar, Image as ImageIcon } from 'lucide-react';
 
-/**
- * Formats ISO timestamp string into readable date & time.
- * e.g., "Sep 7, 2026, 5:30 PM"
- */
 function formatDate(isoString) {
   try {
-    const date = new Date(isoString);
-    return date.toLocaleString('en-US', {
+    const d = new Date(isoString);
+    return d.toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
+      minute: '2-digit'
     });
   } catch (err) {
-    return isoString;
+    return '';
   }
 }
 
-/**
- * PredictionHistory Component
- * Displays persistent classification history saved in browser localStorage.
- */
 export default function PredictionHistory({ history, onClearHistory, onSelectHistoryItem }) {
   const hasHistory = Array.isArray(history) && history.length > 0;
 
   return (
-    <div className="history-card">
+    <div className="card history-card">
       <div className="card-header flex-between">
-        <h2 className="card-title">
-          <History className="card-title-icon" /> Prediction History
-        </h2>
+        <h2 className="card-title">Prediction History</h2>
         {hasHistory && (
-          <button
-            className="clear-history-btn"
-            onClick={onClearHistory}
-            type="button"
-            aria-label="Clear Prediction History"
-          >
-            <Trash2 className="btn-icon" /> Clear History
+          <button className="btn-secondary btn-sm" onClick={onClearHistory} type="button">
+            Clear History
           </button>
         )}
       </div>
 
       {!hasHistory ? (
-        <div className="empty-history">
-          <History className="empty-history-icon" />
-          <p className="empty-history-text">No predictions yet. Upload an image to get started.</p>
+        <div className="empty-history-state">
+          <p>No predictions yet. Upload an image to get started.</p>
         </div>
       ) : (
-        <div className="history-list">
+        <div className="history-grid">
           {history.map((item) => {
-            const formattedCategory = item.category
-              ? item.category.split(',')[0].trim()
-              : 'Unknown';
-            const percentStr = (item.confidence * 100).toFixed(2);
+            const label = item.label ? item.label.split(',')[0].trim() : 'Unknown';
+            const percent = (item.confidence * 100).toFixed(2);
 
             return (
               <div
                 key={item.id}
-                className="history-item"
+                className="history-item-row"
                 onClick={() => onSelectHistoryItem && onSelectHistoryItem(item)}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelectHistoryItem && onSelectHistoryItem(item);
-                  }
-                }}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSelectHistoryItem && onSelectHistoryItem(item)}
               >
-                <div className="history-thumb-wrapper">
+                <div className="history-thumb-box">
                   {item.thumbnail ? (
-                    <img src={item.thumbnail} alt={formattedCategory} className="history-thumb" />
+                    <img src={item.thumbnail} alt={label} className="history-thumb-img" />
                   ) : (
-                    <div className="history-thumb-fallback">
-                      <ImageIcon className="fallback-icon" />
-                    </div>
+                    <div className="history-thumb-empty" />
                   )}
                 </div>
 
-                <div className="history-details">
-                  <span className="history-category" title={item.category}>{formattedCategory}</span>
-                  <span className="history-timestamp">
-                    <Calendar className="time-icon" /> {formatDate(item.timestamp)}
-                  </span>
+                <div className="history-meta flex-1">
+                  <span className="history-category-title">{label}</span>
+                  <span className="history-date-stamp">{formatDate(item.timestamp)}</span>
                 </div>
 
-                <div className="history-score">
-                  <span className="history-percent">{percentStr}%</span>
-                  <span className="history-score-label">confidence</span>
+                <div className="history-score-badge">
+                  <span>{percent}%</span>
                 </div>
               </div>
             );

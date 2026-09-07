@@ -9,130 +9,95 @@ import LoadingState from './components/LoadingState';
 import ErrorMessage from './components/ErrorMessage';
 import EmptyState from './components/EmptyState';
 
-import { loadModel, classifyImage, getModelStatus } from './services/classifier';
+import { loadModel, classifyImage } from './services/classifier';
 import { validateImageFile } from './utils/fileValidation';
 import { getHistory, savePrediction, clearHistory, createThumbnail } from './utils/storage';
 
 export default function App() {
-  // Model state
-  const [modelState, setModelState] = useState({
-    status: 'idle',
-    isReady: false,
-    isLoading: true,
-    error: null
-  });
+  const [isModelReady, setIsModelReady] = useState(false);
+  const [isModelLoading, setIsModelLoading] = useState(true);
+  const [modelError, setModelError] = useState(null);
 
-  // Selected images state
   const [selectedImages, setSelectedImages] = useState([]);
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // Classification & UI states
   const [isClassifying, setIsClassifying] = useState(false);
   const [currentResult, setCurrentResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
-  const [history, setHistoryState] = useState([]);
+  const [history, setHistory] = useState([]);
 
-  // Initialize MobileNet Model on Mount
   const initModel = useCallback(async () => {
-    setModelState({ status: 'loading', isReady: false, isLoading: true, error: null });
+    setIsModelLoading(true);
+    setModelError(null);
     try {
       await loadModel();
-      setModelState({ status: 'ready', isReady: true, isLoading: false, error: null });
+      setIsModelReady(true);
     } catch (err) {
-      const msg = err.message || 'Unable to load the AI model. Please check your internet connection.';
-      setModelState({ status: 'error', isReady: false, isLoading: false, error: msg });
-      setErrorMessage(msg);
+      setModelError(err.message || 'Unable to load AI model.');
+    } finally {
+      setIsModelLoading(false);
     }
   }, []);
 
   useEffect(() => {
     initModel();
-    setHistoryState(getHistory());
+    setHistory(getHistory());
   }, [initModel]);
 
-  // Clean up Object URLs when images state changes or unmounts
-  const revokeImageUrls = (items) => {
-    items.forEach((item) => {
-      if (item && item.previewUrl) {
-        URL.revokeObjectURL(item.previewUrl);
-      }
-    });
-  };
-
-  // Handle incoming file selection
   const handleFilesSelected = (files) => {
     setErrorMessage(null);
+    if (!files || files.length === 0) return;
 
-    if (!files || files.length === 0) {
-      setErrorMessage('Please select an image first.');
-      return;
-    }
-
-    const newItems = [];
-    let firstValidationError = null;
+    const validItems = [];
+    let firstError = null;
 
     files.forEach((file) => {
-      const validation = validateImageFile(file);
-      if (!validation.isValid) {
-        if (!firstValidationError) {
-          firstValidationError = validation.error;
-        }
+      const val = validateImageFile(file);
+      if (!val.isValid) {
+        if (!firstError) firstError = val.error;
       } else {
-        newItems.push({
-          id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+        validItems.push({
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 4),
           file,
           previewUrl: URL.createObjectURL(file)
         });
       }
     });
 
-    if (firstValidationError && newItems.length === 0) {
-      setErrorMessage(firstValidationError);
+    if (firstError && validItems.length === 0) {
+      setErrorMessage(firstError);
       return;
     }
 
-    if (firstValidationError && newItems.length > 0) {
-      setErrorMessage(`Some files were skipped: ${firstValidationError}`);
+    if (firstError && validItems.length > 0) {
+      setErrorMessage(`Skipped invalid file(s): ${firstError}`);
     }
 
-    if (newItems.length > 0) {
-      // Append to existing selected images
-      setSelectedImages((prev) => {
-        const combined = [...prev, ...newItems];
-        return combined;
-      });
-      // Set active index to newly added first image
-      setActiveImageIndex(selectedImages.length);
-      // Reset active prediction result when new batch added
+    if (validItems.length > 0) {
+      setSelectedImages((prev) => [...prev, ...validItems]);
+      setSelectedIndex(selectedImages.length);
       setCurrentResult(null);
     }
   };
 
-  // Remove individual image from batch
-  const handleRemoveImage = (idToRemove) => {
+  const handleRemoveImage = (id) => {
     setSelectedImages((prev) => {
-      const target = prev.find(item => item.id === idToRemove);
+      const target = prev.find(item => item.id === id);
       if (target && target.previewUrl) {
         URL.revokeObjectURL(target.previewUrl);
       }
-      const updated = prev.filter(item => item.id !== idToRemove);
-      return updated;
+      return prev.filter(item => item.id !== id);
     });
 
-    setActiveImageIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : 0));
+    setSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
     setCurrentResult(null);
     setErrorMessage(null);
   };
 
-  // Run real MobileNet inference on selected image element
   const handleClassify = async (imgElement, activeItem) => {
-    if (!imgElement) {
-      setErrorMessage('Unable to read this image. Please try another file.');
-      return;
-    }
-
-    if (!modelState.isReady) {
-      setErrorMessage('AI model is not ready yet. Please wait for model loading.');
+    if (!imgElement) return;
+    if (!isModelReady) {
+      setErrorMessage('AI model is not ready yet.');
       return;
     }
 
@@ -140,87 +105,65 @@ export default function App() {
     setErrorMessage(null);
 
     try {
-      // Execute MobileNet inference
-      const predictions = await classifyImage(imgElement, 3);
+      const predictions = await classifyImage(imgElement);
+      const thumbnail = await createThumbnail(imgElement);
 
-      if (!predictions || predictions.length === 0) {
-        throw new Error('No prediction was returned for this image.');
-      }
-
-      // Generate lightweight thumbnail for history storage
-      const thumbnailBase64 = await createThumbnail(imgElement);
-
-      const topPrediction = predictions[0];
-      const category = topPrediction.className;
-      const confidence = topPrediction.probability;
-
-      // Save to localStorage history
-      const saveRes = savePrediction({
-        category,
-        confidence,
+      const top = predictions[0];
+      const updatedHistory = savePrediction({
+        label: top.className,
+        confidence: top.probability,
         topPredictions: predictions,
-        thumbnail: thumbnailBase64
+        thumbnail
       });
 
-      if (saveRes.history) {
-        setHistoryState(saveRes.history);
-      }
-
-      if (saveRes.error) {
-        setErrorMessage(saveRes.error);
-      }
-
-      // Set current result state
+      setHistory(updatedHistory);
       setCurrentResult({
         imageItem: activeItem,
         predictions,
         timestamp: new Date().toISOString()
       });
     } catch (err) {
-      console.error('Classification execution failed:', err);
-      setErrorMessage(err.message || 'Unable to classify this image. Please try again.');
+      setErrorMessage(err.message || 'Unable to classify this image.');
     } finally {
       setIsClassifying(false);
     }
   };
 
-  // Clear prediction history
   const handleClearHistory = () => {
-    const ok = clearHistory();
-    if (ok) {
-      setHistoryState([]);
+    if (clearHistory()) {
+      setHistory([]);
     } else {
-      setErrorMessage('Failed to clear prediction history from storage.');
+      setErrorMessage('Failed to clear history from storage.');
     }
   };
 
-  // Select historical item to view
   const handleSelectHistoryItem = (item) => {
     if (!item.topPredictions) return;
     setCurrentResult({
-      imageItem: { previewUrl: item.thumbnail, file: { name: 'Historical Image' } },
+      imageItem: { previewUrl: item.thumbnail, file: { name: 'History Item' } },
       predictions: item.topPredictions,
       timestamp: item.timestamp
     });
   };
 
   return (
-    <div className="app-shell">
-      {/* Header with Model Status */}
-      <Header modelState={modelState} onRetryModel={initModel} />
+    <div className="app-wrapper">
+      <Header
+        isModelLoading={isModelLoading}
+        modelError={modelError}
+        onRetry={initModel}
+      />
 
-      <main className="main-content-container">
-        {/* Error Alert Display */}
+      <main className="main-content">
         <ErrorMessage
           message={errorMessage}
           onDismiss={() => setErrorMessage(null)}
-          onRetry={modelState.status === 'error' ? initModel : undefined}
+          onRetry={modelError ? initModel : undefined}
         />
 
-        {/* 2-Column Responsive Layout */}
-        <div className="grid-layout">
-          {/* Left Column: Upload & Image Preview */}
-          <div className="column-left">
+        {/* Classifier Section */}
+        <section className="classifier-grid">
+          <div className="left-panel">
             <ImageUploader
               onFilesSelected={handleFilesSelected}
               isProcessing={isClassifying}
@@ -228,20 +171,17 @@ export default function App() {
 
             <ImagePreview
               images={selectedImages}
-              selectedIndex={activeImageIndex}
-              onSelectIndex={setActiveImageIndex}
+              selectedIndex={selectedIndex}
+              onSelectIndex={setSelectedIndex}
               onRemoveImage={handleRemoveImage}
               onClassify={handleClassify}
               isClassifying={isClassifying}
-              isModelReady={modelState.isReady}
+              isModelReady={isModelReady}
             />
           </div>
 
-          {/* Right Column: AI Predictions & History */}
-          <div className="column-right">
-            {isClassifying && (
-              <LoadingState message="Running MobileNet Neural Inference..." />
-            )}
+          <div className="right-panel">
+            {isClassifying && <LoadingState message="Analyzing image..." />}
 
             {!isClassifying && currentResult && (
               <>
@@ -250,30 +190,19 @@ export default function App() {
               </>
             )}
 
-            {!isClassifying && !currentResult && (
-              <EmptyState />
-            )}
-
-            <PredictionHistory
-              history={history}
-              onClearHistory={handleClearHistory}
-              onSelectHistoryItem={handleSelectHistoryItem}
-            />
+            {!isClassifying && !currentResult && <EmptyState />}
           </div>
-        </div>
-      </main>
+        </section>
 
-      {/* Footer */}
-      <footer className="app-footer">
-        <div className="footer-content">
-          <p>
-            Client-Side AI Inference with <strong>TensorFlow.js</strong> &amp; <strong>MobileNet v2</strong>
-          </p>
-          <p className="footer-sub">
-            Zero Server Dependency • Private Browser Processing • Instant Classification
-          </p>
-        </div>
-      </footer>
+        {/* Prediction History Section */}
+        <section className="history-section">
+          <PredictionHistory
+            history={history}
+            onClearHistory={handleClearHistory}
+            onSelectHistoryItem={handleSelectHistoryItem}
+          />
+        </section>
+      </main>
     </div>
   );
 }
